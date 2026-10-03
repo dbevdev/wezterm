@@ -1,9 +1,7 @@
 name: fedora41_tag
 
 on:
-  push:
-    tags:
-      - "20*"
+  workflow_dispatch:
 
 jobs:
   build:

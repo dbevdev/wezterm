@@ -1,6 +1,8 @@
 name: windows_continuous
 
 on:
+  # Allows publishing a release of the current main by hand
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -21,7 +23,9 @@ jobs:
     runs-on: "windows-2025"
     
     env:
-      BUILD_REASON: "Schedule"
+      # Not "Schedule", so that ci/deploy.sh names the files after the
+      # version rather than "nightly"
+      BUILD_REASON: "Release"
       CARGO_INCREMENTAL: "0"
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
@@ -92,14 +96,14 @@ jobs:
             WezTerm-*.exe
           retention-days: 90
 
-  upload:
+  release:
     runs-on: ubuntu-latest
     needs: build
-    if: github.repository == 'wezterm/wezterm'
+    # Every build of main in the fork is published as a GitHub release;
+    # the update checker of the fork's builds looks for these.
+    if: github.repository != 'wezterm/wezterm'
     permissions:
       contents: write
-      pages: write
-      id-token: write
 
     steps:
       - name: "checkout repo"
@@ -111,8 +115,19 @@ jobs:
       - name: "Checksum"
         shell: bash
         run: "for f in WezTerm-*.zip WezTerm-*.exe ; do sha256sum $f > $f.sha256 ; done"
-      - name: "Upload to Nightly Release"
+      - name: "Publish release"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
-        run: "bash ci/retry.sh gh release upload --clobber nightly WezTerm-*.zip WezTerm-*.exe *.sha256"
+        run: |
+          # Same format as the version that is compiled into the binaries,
+          # which the update checker compares the release tag with
+          TAG=$(ci/tag-name.sh)
+          if ! gh release view "$TAG" > /dev/null 2>&1 ; then
+            bash ci/retry.sh gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "WezTerm $TAG" \
+              --generate-notes \
+              --latest
+          fi
+          bash ci/retry.sh gh release upload --clobber "$TAG" WezTerm-*.zip WezTerm-*.exe *.sha256
