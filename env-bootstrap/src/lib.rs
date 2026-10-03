@@ -189,6 +189,7 @@ fn register_lua_modules() {
     for func in [
         battery::register,
         color_funcs::register,
+        command_macros::register,
         termwiz_funcs::register,
         logging::register,
         mux_lua::register,

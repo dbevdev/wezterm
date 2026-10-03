@@ -66,6 +66,7 @@ clipboard-win = "5.4.1"
 cocoa = "=0.25.0"
 codec = { path = "codec" }
 color-funcs = { path = "lua-api-crates/color-funcs" }
+command-macros = { path = "lua-api-crates/macros" }
 colorgrad = "0.6"
 config = { path = "config" }
 core-foundation = "=0.10.0"

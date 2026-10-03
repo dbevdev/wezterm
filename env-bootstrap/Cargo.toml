@@ -12,6 +12,7 @@ backtrace.workspace = true
 battery.workspace = true
 chrono.workspace = true
 color-funcs.workspace = true
+command-macros.workspace = true
 config.workspace = true
 dirs-next.workspace = true
 env_logger = "0.10" # Note: we rely on filter::Builder which is gone in 0.11

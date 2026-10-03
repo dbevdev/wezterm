@@ -941,6 +941,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "command-macros"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "config",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1534,6 +1542,7 @@ dependencies = [
  "battery",
  "chrono",
  "color-funcs",
+ "command-macros",
  "config",
  "dirs-next",
  "env_logger 0.10.2",
