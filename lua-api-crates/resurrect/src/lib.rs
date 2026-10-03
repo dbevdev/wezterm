@@ -285,6 +285,44 @@ mod test {
     }
 
     #[test]
+    fn pane_tree_saves_bound_macros() {
+        let lua = Lua::new();
+        register(&lua).unwrap();
+        lua.load(
+            r#"
+            package.loaded.wezterm = {
+                target_triple = "x86_64-unknown-linux-gnu",
+                log_warn = function() end,
+                emit = function() end,
+                mux = {
+                    get_domain = function()
+                        return { is_spawnable = function() return false end }
+                    end,
+                },
+            }
+            package.loaded.macros = {
+                bound_to_pane = function(pane) return pane.bound end,
+            }
+            local function pane(left, top, bound)
+                return {
+                    left = left, top = top, width = 39, height = 24,
+                    pane = { bound = bound, get_domain_name = function() return "local" end },
+                }
+            end
+            local tree = require("resurrect.pane_tree").create_pane_tree({
+                pane(0, 0, "web01-logs"),
+                pane(40, 0, nil),
+            })
+            assert(tree.macro == "web01-logs")
+            assert(tree.right and tree.right.macro == nil)
+            assert(tree.pane == nil and tree.right.pane == nil)
+            "#,
+        )
+        .exec()
+        .unwrap_or_else(|err| panic!("{err:#}"));
+    }
+
+    #[test]
     fn pane_tree_single_cell_dividers() {
         // Left half split top/bottom, right column: the layout from
         // mux's tab_splitting test with the default 1 cell dividers

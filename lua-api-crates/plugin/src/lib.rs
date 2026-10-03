@@ -184,7 +184,87 @@ impl RepoSpec {
     }
 }
 
+/// Registry key of the list of URLs that `wezterm.plugin.require` may load
+const ALLOWLIST: &str = "wezterm-plugin-allowlist";
+/// Registry key that is set once the first plugin has been required, after
+/// which the allowlist can no longer be extended
+const ALLOWLIST_LOCKED: &str = "wezterm-plugin-allowlist-locked";
+
+fn normalize_url(url: &str) -> &str {
+    let url = url.trim_end_matches('/');
+    url.strip_suffix(".git").unwrap_or(url)
+}
+
+/// Returns true if `url` is allowed by the allowlist `entry`:
+/// `*` allows everything, an entry ending with `/` allows every URL that
+/// starts with it, any other entry allows just that URL.
+/// URLs are compared case-insensitively, ignoring a trailing `/` or `.git`.
+fn url_matches(entry: &str, url: &str) -> bool {
+    if entry == "*" {
+        return true;
+    }
+    let url_lower = url.to_ascii_lowercase();
+    let entry_lower = entry.to_ascii_lowercase();
+    if entry_lower.ends_with('/') {
+        // so that "https://host/user/repo/" also allows ".../user/repo"
+        return format!("{}/", normalize_url(&url_lower)).starts_with(&entry_lower);
+    }
+    normalize_url(&entry_lower) == normalize_url(&url_lower)
+}
+
+fn allowlist(lua: &Lua) -> mlua::Result<Vec<String>> {
+    Ok(lua
+        .named_registry_value::<Option<Vec<String>>>(ALLOWLIST)?
+        .unwrap_or_default())
+}
+
+fn is_allowed(lua: &Lua, url: &str) -> mlua::Result<bool> {
+    Ok(allowlist(lua)?.iter().any(|entry| url_matches(entry, url)))
+}
+
+/// `wezterm.plugin.allow(url_or_urls)`: allows `wezterm.plugin.require` to
+/// load the specified plugins. This build doesn't load any plugin unless
+/// it is allowed, which protects against plugins pulling in other code
+/// from the network. It must be called before the first
+/// `wezterm.plugin.require`, so that plugins can't extend the list.
+fn allow_plugins(lua: &Lua, urls: mlua::Value) -> mlua::Result<()> {
+    if lua
+        .named_registry_value::<Option<bool>>(ALLOWLIST_LOCKED)?
+        .unwrap_or(false)
+    {
+        return Err(mlua::Error::external(
+            "wezterm.plugin.allow must be called before the first wezterm.plugin.require",
+        ));
+    }
+    let new_urls: Vec<String> = match urls {
+        mlua::Value::String(s) => vec![s.to_str()?.to_string()],
+        mlua::Value::Table(t) => t
+            .sequence_values::<String>()
+            .collect::<mlua::Result<Vec<String>>>()?,
+        other => {
+            return Err(mlua::Error::external(format!(
+                "wezterm.plugin.allow expects a string or a list of strings, got {}",
+                other.type_name()
+            )))
+        }
+    };
+    let mut list = allowlist(lua)?;
+    list.extend(new_urls);
+    lua.set_named_registry_value(ALLOWLIST, list)
+}
+
 fn require_plugin(lua: &Lua, url: String) -> anyhow::Result<Value<'_>> {
+    lua.set_named_registry_value(ALLOWLIST_LOCKED, true)?;
+    if !is_allowed(lua, &url)? {
+        anyhow::bail!(
+            "loading the plugin {url} is not allowed: this build of wezterm only \
+             loads plugins that are listed with wezterm.plugin.allow({{ \"{url}\" }}) \
+             (or wezterm.plugin.allow(\"*\") to allow any plugin), \
+             which must be called in your configuration before the first \
+             wezterm.plugin.require"
+        );
+    }
+
     let spec = RepoSpec::parse(url)?;
 
     if !spec.is_checked_out() {
@@ -239,10 +319,20 @@ pub fn register(lua: &Lua) -> anyhow::Result<()> {
     )?;
 
     plugin_mod.set(
+        "allow",
+        lua.create_function(|lua, urls: mlua::Value| allow_plugins(lua, urls))?,
+    )?;
+
+    plugin_mod.set(
         "update_all",
-        lua.create_function(|_, _: ()| {
+        lua.create_function(|lua, _: ()| {
             let plugins = list_plugins().map_err(|e| mlua::Error::external(format!("{e:#}")))?;
             for p in plugins {
+                // Don't fetch new code for plugins that are no longer allowed
+                if !is_allowed(lua, &p.url)? {
+                    log::info!("Not updating {} as it is not allowed", p.url);
+                    continue;
+                }
                 match p.update() {
                     Ok(_) => log::info!("Updated {p:?}"),
                     Err(err) => log::error!("Failed to update {p:?}: {err:#}"),
@@ -271,5 +361,70 @@ mod test {
             let result = compute_repo_dir(input);
             assert_eq!(&result, expect, "for input {input}");
         }
+    }
+
+    #[test]
+    fn test_url_matches() {
+        let url = "https://github.com/MLFlexer/resurrect.wezterm";
+        assert!(url_matches("*", url));
+        assert!(url_matches(url, url));
+        assert!(url_matches(
+            "https://github.com/mlflexer/resurrect.wezterm/",
+            url
+        ));
+        assert!(url_matches(
+            "https://github.com/MLFlexer/resurrect.wezterm.git",
+            url
+        ));
+        assert!(url_matches("https://github.com/MLFlexer/", url));
+        assert!(!url_matches("https://github.com/MLFlexer", url));
+        assert!(!url_matches("https://github.com/MLFlexer/resurrect", url));
+        assert!(!url_matches("https://github.com/chrisgve/", url));
+        assert!(!url_matches(
+            "https://github.com/MLFlexer/",
+            "https://github.com/MLFlexerEvil/x"
+        ));
+    }
+
+    #[test]
+    fn test_allowlist() {
+        let lua = Lua::new();
+        register(&lua).unwrap();
+        lua.load(
+            r#"
+            local plugin = require("wezterm").plugin
+            -- nothing is allowed by default, and the check happens before
+            -- anything is fetched
+            local ok, err = pcall(plugin.require, "https://example.invalid/some/plugin")
+            assert(not ok)
+            assert(tostring(err):find("is not allowed", 1, true), tostring(err))
+            -- once a plugin has been required, the list can't be extended,
+            -- so plugins can't allow themselves to load more code
+            local ok, err = pcall(plugin.allow, "*")
+            assert(not ok)
+            assert(tostring(err):find("before the first", 1, true), tostring(err))
+            "#,
+        )
+        .exec()
+        .unwrap_or_else(|err| panic!("{err:#}"));
+
+        let lua = Lua::new();
+        register(&lua).unwrap();
+        lua.load(
+            r#"
+            local plugin = require("wezterm").plugin
+            plugin.allow("https://github.com/a/one")
+            plugin.allow({ "https://github.com/b/", "https://github.com/c/three" })
+            local ok, err = pcall(plugin.allow, 42)
+            assert(not ok and tostring(err):find("expects a string"), tostring(err))
+            "#,
+        )
+        .exec()
+        .unwrap_or_else(|err| panic!("{err:#}"));
+        assert!(is_allowed(&lua, "https://github.com/a/one").unwrap());
+        assert!(is_allowed(&lua, "https://github.com/b/two").unwrap());
+        assert!(is_allowed(&lua, "https://github.com/c/three").unwrap());
+        assert!(!is_allowed(&lua, "https://github.com/a/two").unwrap());
+        assert!(!is_allowed(&lua, "https://github.com/chrisgve/dev.wezterm").unwrap());
     }
 }

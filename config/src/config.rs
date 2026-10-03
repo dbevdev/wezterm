@@ -845,6 +845,16 @@ pub struct Config {
     #[dynamic(default = "default_one")]
     pub pane_divider_rows: usize,
 
+    /// The thickness of the line drawn in the middle of the dividers
+    /// between panes; 0 hides it. Defaults to the underline thickness.
+    #[dynamic(try_from = "crate::units::OptPixelUnit", default)]
+    pub pane_divider_line_width: Option<Dimension>,
+
+    /// If set, the parts of the divider lines that border the active
+    /// pane are drawn in this color, to highlight the active pane.
+    #[dynamic(default)]
+    pub active_pane_split_color: Option<RgbaColor>,
+
     #[dynamic(default = "default_max_fps")]
     pub max_fps: u64,
 

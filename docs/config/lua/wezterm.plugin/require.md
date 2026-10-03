@@ -11,6 +11,9 @@ The function takes a single string parameter, the Git repo URL
 
 Only HTTP(S) or local filesystem repos are allowed for the git URL.
 
+This fork only loads plugins that are allowed with
+[wezterm.plugin.allow](allow.md), which must be called first.
+
 ```lua
 local remote_plugin = wezterm.plugin.require 'https://github.com/owner/repo'
 local local_plugin =

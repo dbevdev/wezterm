@@ -35,6 +35,46 @@ config.pane_divider_rows = 2 -- height of the divider between top/bottom panes, 
 See [pane_divider_cols](docs/config/lua/config/pane_divider_cols.md) and
 [pane_divider_rows](docs/config/lua/config/pane_divider_rows.md).
 
+### Highlighting the active pane
+
+```lua
+config.active_pane_split_color = "#7aa2f7" -- outline the active pane in this color
+config.pane_divider_line_width = "2px"      -- thickness of the split lines; 0 hides them
+```
+
+The parts of the split lines that border the active pane are drawn in
+`active_pane_split_color`; it is not set by default. See
+[active_pane_split_color](docs/config/lua/config/active_pane_split_color.md)
+and [pane_divider_line_width](docs/config/lua/config/pane_divider_line_width.md).
+
+### Command macros
+
+`require("macros")` provides named macros: sequences of commands that are
+typed into a pane, optionally waiting for output in between. Because they
+type into the pane, they also work on a remote host after `ssh`:
+
+```lua
+local macros = require("macros")
+macros.define("web01-logs", {
+  description = "Connect to web01 and follow the application log",
+  steps = {
+    "ssh web01",
+    { wait_for = macros.PROMPT, timeout = 30 }, -- wait for the remote prompt
+    "cd /srv/app && tail -f log/app.log",
+  },
+})
+config.keys = {
+  { key = "m", mods = "ALT", action = macros.action.select() },       -- pick and run a macro
+  { key = "b", mods = "ALT", action = macros.action.bind_to_pane() }, -- bind one to the pane
+}
+```
+
+Macros can be run from key bindings, a fuzzy selector or the command
+palette, cancelled, and bound to a pane or a tab: the bundled resurrect
+saves the binding and runs the macro again when it restores the pane
+(asking first by default), so a pane that was connected to a server
+reconnects to it. See [lua-api-crates/macros/README.md](lua-api-crates/macros/README.md).
+
 ### Built-in session saving (resurrect)
 
 The [resurrect.wezterm](https://github.com/MLFlexer/resurrect.wezterm) plugin,
@@ -53,7 +93,9 @@ plugin, the bundled version:
   `find`), except for the optional encryption with `age`/`rage`/`gpg`;
 * saves the state in `%LOCALAPPDATA%\wezterm\resurrect\` on Windows
   (`<wezterm data dir>/resurrect/` elsewhere);
-* works with the wider pane dividers described above.
+* works with the wider pane dividers described above;
+* saves the [macros](lua-api-crates/macros/README.md) bound to panes and
+  tabs, and runs them when it restores them.
 
 The saved state contains the text of the panes in plain text unless
 encryption is enabled. See
@@ -62,19 +104,39 @@ for a complete configuration example (key bindings to save and restore,
 periodic saving, restoring the last session on startup) and the list of
 changes.
 
+### Plugins must be allowed
+
+`wezterm.plugin.require` downloads a plugin from the network and runs it with
+wezterm's rights, and a plugin can download further plugins. This build only
+loads plugins that are listed first:
+
+```lua
+wezterm.plugin.allow({ "https://github.com/owner/repo" }) -- or "*" for any plugin
+local plugin = wezterm.plugin.require("https://github.com/owner/repo")
+```
+
+The list can't be changed after the first `wezterm.plugin.require`, so a
+plugin can't allow itself to load more code. See
+[wezterm.plugin.allow](docs/config/lua/wezterm.plugin/allow.md).
+
 ### Getting a build
 
-The fork only builds for Windows, using GitHub Actions:
+Download the latest build from the
+[Releases](https://github.com/dbevdev/wezterm/releases/latest) page: every
+change merged into `main` is built for Windows and published as a release,
+with the installer (`WezTerm-*-setup.exe`), a portable zip
+(`WezTerm-windows-*.zip`; you only need one of the two) and their SHA-256
+checksums. A new release can also be published by hand by running the
+`windows_continuous` workflow on the Actions page.
 
-* every pull request runs the `windows` workflow (build, tests, packaging);
-* every push to `main` that touches the code runs the `windows_continuous`
-  workflow.
+wezterm checks for updates in this fork's releases (not upstream's, which
+lack these features) and shows a notification when a newer one is
+available; `config.check_for_updates = false` turns that off.
 
-Open the run on the [Actions](https://github.com/dbevdev/wezterm/actions)
-page and download the `windows` artifact from the *Artifacts* section (you
-need to be signed in to GitHub). It contains the installer
-(`WezTerm-*-setup.exe`) and a portable zip (`WezTerm-windows-*.zip`); you only
-need one of them.
+Every pull request is also built and tested by the `windows` workflow; its
+installer is available as the `windows` artifact of the run on the
+[Actions](https://github.com/dbevdev/wezterm/actions) page (you need to be
+signed in to GitHub).
 
 To install, close all wezterm windows (and `wezterm-mux-server.exe`, if you
 use multiplexer domains) and run the installer. It is not code signed, so

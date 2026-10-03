@@ -40,6 +40,11 @@ directory shows the unmodified import followed by the changes listed below.
   adjacent panes are exactly one cell apart and silently dropped panes.
 * `save_tab_action()` / `save_window_action()` no longer call the
   nonexistent `resurrect.save_state` after prompting for a title.
+* The names of the [macros](../macros/README.md) bound to panes and tabs
+  are saved with them; when a tab is restored, the bindings are re-created
+  and the macros run as configured by `macros.restore_mode` (by default
+  after asking). Panes with a bound macro don't re-run their saved
+  foreground command.
 
 ## Example
 
