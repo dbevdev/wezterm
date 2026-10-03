@@ -77,6 +77,10 @@ As features stabilize some brief notes about them will accumulate here.
   easier to spot the remaining candidates. Thanks to @mr-felixoid and @bew! #7752
 
 #### New
+* [active_pane_split_color](config/lua/config/active_pane_split_color.md) to
+  outline the active pane, and
+  [pane_divider_line_width](config/lua/config/pane_divider_line_width.md) to
+  change the thickness of the split lines or hide them.
 * [pane_divider_cols](config/lua/config/pane_divider_cols.md) and
   [pane_divider_rows](config/lua/config/pane_divider_rows.md) options to make
   the dividers between panes wider/taller than a single cell, leaving more

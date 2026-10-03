@@ -249,6 +249,13 @@ impl crate::TermWindow {
             .context("filled_rectangle for window background")?;
         }
 
+        // The cell rectangle of the active pane, whose bordering divider
+        // lines may be highlighted
+        let active_pane_rect = panes
+            .iter()
+            .find(|pos| pos.is_active)
+            .map(|pos| (pos.left, pos.top, pos.width, pos.height));
+
         for pos in panes {
             if pos.is_active {
                 self.update_text_cursor(&pos);
@@ -263,7 +270,7 @@ impl crate::TermWindow {
         if let Some(pane) = self.get_active_pane_or_overlay() {
             let splits = self.get_splits();
             for split in &splits {
-                self.paint_split(&mut layers, split, &pane)
+                self.paint_split(&mut layers, split, &pane, active_pane_rect)
                     .context("paint_split")?;
             }
         }
