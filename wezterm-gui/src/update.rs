@@ -16,10 +16,21 @@ use termwiz::escape::osc::{ITermDimension, ITermFileData, ITermProprietary};
 use termwiz::escape::{OneBased, OperatingSystemCommand, CSI};
 use wezterm_toast_notification::*;
 
+/// The GitHub repository whose releases are checked for updates.
+/// This fork publishes its own builds, so it must not point users at the
+/// upstream wezterm/wezterm releases, which lack the fork's features.
+const RELEASES_REPO: &str = "dbevdev/wezterm";
+
+/// Name of the file in the data directory that caches the last check.
+/// It differs from upstream's `check_update` so that the cached release
+/// info of an upstream installation is not mistaken for one of ours.
+const UPDATE_CHECK_FILE: &str = "check_update_dbevdev";
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Release {
     pub url: String,
-    pub body: String,
+    #[serde(default)]
+    pub body: Option<String>,
     pub html_url: String,
     pub tag_name: String,
     pub assets: Vec<Asset>,
@@ -56,12 +67,9 @@ fn get_github_release_info(uri: &str) -> anyhow::Result<Release> {
 }
 
 pub fn get_latest_release_info() -> anyhow::Result<Release> {
-    get_github_release_info("https://api.github.com/repos/wezterm/wezterm/releases/latest")
-}
-
-#[allow(unused)]
-pub fn get_nightly_release_info() -> anyhow::Result<Release> {
-    get_github_release_info("https://api.github.com/repos/wezterm/wezterm/releases/tags/nightly")
+    get_github_release_info(&format!(
+        "https://api.github.com/repos/{RELEASES_REPO}/releases/latest"
+    ))
 }
 
 lazy_static::lazy_static! {
@@ -73,7 +81,7 @@ pub fn load_last_release_info_and_set_banner() {
         return;
     }
 
-    let update_file_name = config::DATA_DIR.join("check_update");
+    let update_file_name = config::DATA_DIR.join(UPDATE_CHECK_FILE);
     if let Ok(data) = std::fs::read(update_file_name) {
         let latest: Release = match serde_json::from_slice(&data) {
             Ok(d) => d,
@@ -92,7 +100,7 @@ pub fn load_last_release_info_and_set_banner() {
 
 fn set_banner_from_release_info(latest: &Release) {
     let mux = crate::Mux::get();
-    let url = format!("https://wezterm.org/changelog.html#{}", latest.tag_name);
+    let url = latest.html_url.clone();
 
     let icon = ITermFileData {
         name: None,
@@ -156,7 +164,7 @@ fn update_checker() {
 
     let force_ui = std::env::var_os("WEZTERM_ALWAYS_SHOW_UPDATE_UI").is_some();
 
-    let update_file_name = config::DATA_DIR.join("check_update");
+    let update_file_name = config::DATA_DIR.join(UPDATE_CHECK_FILE);
     let delay = update_file_name
         .metadata()
         .and_then(|metadata| metadata.modified())
@@ -191,7 +199,7 @@ fn update_checker() {
                         current
                     );
 
-                    let url = format!("https://wezterm.org/changelog.html#{}", latest.tag_name);
+                    let url = latest.html_url.clone();
 
                     if force_ui || socks.is_empty() || socks[0] == my_sock {
                         persistent_toast_notification_with_click_to_open_url(
