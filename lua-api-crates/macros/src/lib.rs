@@ -38,6 +38,7 @@ mod test {
                 GLOBAL = {},
                 log_warn = function() end,
                 action_callback = function(f) return f end,
+                action = { InputSelector = function(args) return args end },
                 emit = function() end,
                 sleep_ms = function(ms)
                     polls = polls + 1
@@ -214,6 +215,76 @@ mod test {
         )
         .exec()
         .unwrap();
+    }
+
+    #[test]
+    fn restored_bindings() {
+        let lua = lua_with_fake_pane();
+        lua.load(
+            r#"
+            macros.define("hello", { "echo hello" })
+            local function restored_pane(id)
+                local pane = fake_pane({ prompt = "$ " })
+                pane.pane_id = function() return id end
+                return pane
+            end
+            local tab = { tab_id = function() return 7 end }
+
+            -- bindings are kept per pane and per tab
+            local p1 = restored_pane(1)
+            assert(macros.bound_to_pane(p1) == nil)
+            macros.bind_pane(p1, "hello")
+            assert(macros.bound_to_pane(p1) == "hello")
+            macros.bind_pane(p1, nil)
+            assert(macros.bound_to_pane(p1) == nil)
+            macros.bind_tab(tab, "hello")
+            assert(macros.bound_to_tab(tab) == "hello")
+
+            -- "never": the binding is re-created for the new pane, nothing runs
+            macros.restore_mode = "never"
+            local p2 = restored_pane(2)
+            macros.run_restored(p2, "hello")
+            assert(macros.bound_to_pane(p2) == "hello")
+            assert(#p2.sent == 0)
+
+            -- unknown macros (e.g. from a tampered state file) are not run
+            macros.restore_mode = "always"
+            local p3 = restored_pane(3)
+            macros.run_restored(p3, "rm -rf ~")
+            assert(#p3.sent == 0)
+
+            -- "always": runs without asking
+            local p4 = restored_pane(4)
+            macros.run_restored(p4, "hello")
+            assert(#p4.sent == 1 and p4.sent[1].text == "echo hello\r")
+
+            -- "ask": asks once for all the restored macros
+            macros.restore_mode = "ask"
+            local asked = {}
+            local window = {
+                perform_action = function(_, action, pane) table.insert(asked, { action = action, pane = pane }) end,
+            }
+            local p5 = restored_pane(5)
+            p5.window = function() return { gui_window = function() return window end } end
+            local p6 = restored_pane(6)
+            -- the delayed flush runs immediately in this test, so queue
+            -- both panes through run_queue as resurrect does in one go
+            macros.run_queue({ { pane = p5, name = "hello" }, { pane = p6, name = "hello" } })
+            assert(#asked == 1, "asked " .. #asked .. " times")
+            assert(asked[1].action.title:find("hello, hello", 1, true), asked[1].action.title)
+            assert(#p5.sent == 0 and #p6.sent == 0)
+            -- answering yes runs both
+            asked[1].action.action(window, p5, "yes")
+            assert(#p5.sent == 1 and #p6.sent == 1)
+
+            -- without a window to ask in, nothing runs
+            local p7 = restored_pane(7)
+            macros.run_queue({ { pane = p7, name = "hello" } })
+            assert(#p7.sent == 0)
+            "#,
+        )
+        .exec()
+        .unwrap_or_else(|err| panic!("{err:#}"));
     }
 
     #[test]

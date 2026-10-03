@@ -51,6 +51,22 @@ function utils.ensure_folder_exists(path)
 	require("resurrect.native").ensure_dir(path)
 end
 
+-- Calls `macros[func](...)` if the macros module is available, returning
+-- its result, or nil if the module or the call fails
+---@param func string
+---@return any
+function utils.call_macros(func, ...)
+	local ok, macros = pcall(require, "macros")
+	if not ok or type(macros) ~= "table" or macros[func] == nil then
+		return nil
+	end
+	local ok2, result = pcall(macros[func], ...)
+	if ok2 then
+		return result
+	end
+	wezterm.log_warn("resurrect: macros." .. func .. " failed: " .. tostring(result))
+end
+
 -- deep copy
 ---@param original table
 ---@return any copy

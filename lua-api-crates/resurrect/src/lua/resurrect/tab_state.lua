@@ -1,5 +1,6 @@
 local wezterm = require("wezterm") --[[@as Wezterm]] --- this type cast invokes the LSP module for Wezterm
 local pane_tree_mod = require("resurrect.pane_tree")
+local utils = require("resurrect.utils")
 local pub = {}
 
 ---Function used to split panes when mapping over the pane_tree
@@ -72,6 +73,8 @@ function pub.get_tab_state(tab)
 		title = tab:get_title(),
 		is_zoomed = is_zoomed(),
 		pane_tree = pane_tree_mod.create_pane_tree(panes),
+		-- Only the name of a bound macro is saved; its steps come from the config
+		macro = utils.call_macros("bound_to_tab", tab),
 	}
 
 	return tab_state
@@ -116,6 +119,18 @@ function pub.restore_tab(tab, tab_state, opts)
 
 	local acc = pane_tree_mod.fold(tab_state.pane_tree, { is_zoomed = false }, make_splits(opts))
 	acc.active_pane:activate()
+
+	-- Re-create the macro bindings for the new panes and tab, and run the
+	-- bound macros as configured by the macros module's restore_mode
+	pane_tree_mod.fold(tab_state.pane_tree, nil, function(_, tree)
+		if tree.macro and tree.pane then
+			utils.call_macros("run_restored", tree.pane, tree.macro)
+		end
+	end)
+	if tab_state.macro then
+		utils.call_macros("run_restored", acc.active_pane, tab_state.macro, tab)
+	end
+
 	wezterm.emit("resurrect.tab_state.restore_tab.finished")
 end
 
@@ -149,8 +164,11 @@ end
 function pub.default_on_pane_restore(pane_tree)
 	local pane = pane_tree.pane
 
-	-- Spawn process if using alt screen, otherwise restore text
-	if pane_tree.alt_screen_active then
+	-- Spawn process if using alt screen, otherwise restore text.
+	-- A pane with a bound macro is set up by the macro instead.
+	if pane_tree.alt_screen_active and pane_tree.macro then
+		return
+	elseif pane_tree.alt_screen_active then
 		pane:send_text(wezterm.shell_join_args(pane_tree.process.argv) .. "\r\n")
 	elseif pane_tree.text then
 		pane:inject_output(pane_tree.text:gsub("%s+$", ""))

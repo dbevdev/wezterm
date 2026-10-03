@@ -410,6 +410,118 @@ function pub.select(window, pane, title, callback)
 	)
 end
 
+-- Bindings of macros to panes and tabs.
+-- They are kept in wezterm.GLOBAL so that they survive configuration
+-- reloads, and are saved and restored by the bundled resurrect plugin
+-- (only the macro name is saved; the steps always come from the config).
+
+--- What to do with the macros bound to panes and tabs that resurrect
+--- restores: "ask" (default) asks once for all of them, "always" runs them
+--- without asking, "never" keeps the bindings but doesn't run them.
+pub.restore_mode = "ask"
+
+--- Seconds to wait after a restore before running (or asking about) the
+--- bound macros, so that the restored shells have started
+pub.restore_delay = 1.0
+
+local function bindings(kind)
+	if wezterm.GLOBAL.macros_bindings == nil then
+		wezterm.GLOBAL.macros_bindings = { panes = {}, tabs = {} }
+	end
+	return wezterm.GLOBAL.macros_bindings[kind]
+end
+
+--- Binds the macro `name` to the pane (nil removes the binding)
+function pub.bind_pane(pane, name)
+	bindings("panes")[tostring(pane:pane_id())] = name
+end
+
+--- Returns the name of the macro bound to the pane, or nil
+function pub.bound_to_pane(pane)
+	return bindings("panes")[tostring(pane:pane_id())]
+end
+
+--- Binds the macro `name` to the tab (nil removes the binding).
+--- When the tab is restored, the macro runs in its active pane.
+function pub.bind_tab(tab, name)
+	bindings("tabs")[tostring(tab:tab_id())] = name
+end
+
+--- Returns the name of the macro bound to the tab, or nil
+function pub.bound_to_tab(tab)
+	return bindings("tabs")[tostring(tab:tab_id())]
+end
+
+-- Macros queued by `run_restored`, run together after `restore_delay`
+local restored_queue = nil
+
+--- Called by resurrect for each restored pane that has a bound macro:
+--- the binding is re-created for the new pane and the macro is queued
+--- according to `restore_mode`. Unknown macro names are ignored.
+---@param pane any the restored pane
+---@param name string
+---@param tab any? the restored tab, if the macro was bound to the tab
+function pub.run_restored(pane, name, tab)
+	if type(name) ~= "string" then
+		return
+	end
+	if tab then
+		pub.bind_tab(tab, name)
+	else
+		pub.bind_pane(pane, name)
+	end
+	if registry[name] == nil then
+		wezterm.log_warn(string.format("macros: restored binding to unknown macro %q is not run", name))
+		return
+	end
+	if pub.restore_mode == "never" then
+		return
+	end
+	local first = restored_queue == nil
+	if first then
+		restored_queue = {}
+	end
+	table.insert(restored_queue, { pane = pane, name = name })
+	if first then
+		wezterm.time.call_after(pub.restore_delay, function()
+			local queue = restored_queue
+			restored_queue = nil
+			pub.run_queue(queue)
+		end)
+	end
+end
+
+--- Runs the queued restored macros, asking first when restore_mode is "ask"
+function pub.run_queue(queue)
+	if queue == nil or #queue == 0 then
+		return
+	end
+	local function run_all()
+		for _, item in ipairs(queue) do
+			pub.run(item.pane, item.name)
+		end
+	end
+	if pub.restore_mode == "always" then
+		run_all()
+		return
+	end
+	local window = gui_window_for(queue[1].pane)
+	if window == nil then
+		wezterm.log_warn("macros: no window to ask whether to run the restored macros; not running them")
+		return
+	end
+	local names = {}
+	for _, item in ipairs(queue) do
+		table.insert(names, item.name)
+	end
+	pub.confirm(
+		window,
+		queue[1].pane,
+		string.format("Run the macros bound to the restored panes? (%s)", table.concat(names, ", ")),
+		run_all
+	)
+end
+
 --- Key assignments
 pub.action = {}
 
@@ -436,6 +548,53 @@ function pub.action.cancel()
 		if not pub.cancel(pane) then
 			notify(pane, "no macro is running in this pane")
 		end
+	end)
+end
+
+-- Macro names are never empty, so "" means "no macro"
+local NO_MACRO = ""
+
+local function bind_with_selector(window, pane, kind)
+	local title = kind == "tab" and "Bind a macro to this tab" or "Bind a macro to this pane"
+	local choices = { { id = NO_MACRO, label = "(no macro: remove the binding)" } }
+	for _, name in ipairs(pub.list()) do
+		table.insert(choices, { id = name, label = choice_label(registry[name]) })
+	end
+	window:perform_action(
+		wezterm.action.InputSelector({
+			title = title,
+			choices = choices,
+			fuzzy = true,
+			action = wezterm.action_callback(function(_, p, id)
+				if id == nil then
+					return
+				end
+				local name = id ~= NO_MACRO and id or nil
+				if kind == "tab" then
+					pub.bind_tab(p:tab(), name)
+				else
+					pub.bind_pane(p, name)
+				end
+			end),
+		}),
+		pane
+	)
+end
+
+--- Shows a selector to bind a macro to the active pane, or to remove the
+--- binding. Bound macros are saved by resurrect and run when it restores
+--- the pane (see `restore_mode`).
+function pub.action.bind_to_pane()
+	return wezterm.action_callback(function(window, pane)
+		bind_with_selector(window, pane, "pane")
+	end)
+end
+
+--- Like `bind_to_pane`, for the active tab; the macro runs in the active
+--- pane of the tab when it is restored
+function pub.action.bind_to_tab()
+	return wezterm.action_callback(function(window, pane)
+		bind_with_selector(window, pane, "tab")
 	end)
 end
 
