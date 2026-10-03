@@ -7,6 +7,7 @@ The `wezterm.plugin` module provides functions to manage Wezterm plugins.
 ## Available functions
 
 
+  - [allow](allow.md)
   - [list](list.md)
   - [require](require.md)
   - [update_all](update_all.md)
