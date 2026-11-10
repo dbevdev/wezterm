@@ -58,6 +58,10 @@ the network for an application like wezterm. Keep the files small: Windows
 ignores images that are larger than a few megabytes. If a file doesn't exist,
 a warning is logged and the notification is shown without that image.
 
+Animated GIF files are animated, both in the notification and in the
+notification center; this was observed on Windows 11 for `icon` and
+`hero_image`.
+
 Only the first handler that was registered for the event is called. The
 handler may call asynchronous functions. If it raises an error, or returns
 something else than described above, the error is logged and the notification
