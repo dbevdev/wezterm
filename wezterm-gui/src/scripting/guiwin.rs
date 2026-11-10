@@ -98,6 +98,7 @@ impl UserData for GuiWin {
                     attribution: None,
                     silent: config::configuration().toast_notification_silent,
                     tag: None,
+                    images: Default::default(),
                 });
                 Ok(())
             },

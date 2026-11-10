@@ -583,6 +583,9 @@ struct ToastNotificationFormat {
     attribution: Option<String>,
     silent: Option<bool>,
     duration: Option<ToastNotificationDuration>,
+    icon: Option<String>,
+    image: Option<String>,
+    hero_image: Option<String>,
 }
 
 /// Shows the toast notification that was requested by a pane, after
@@ -630,6 +633,7 @@ async fn format_and_show_pane_toast_notification(
             // A pane has at most one notification at a time; a new one
             // replaces the one that it showed earlier
             tag: Some(pane_toast_notification_tag(pane_id)),
+            images: ToastImages::default(),
         }
     };
 
@@ -658,6 +662,12 @@ async fn format_and_show_pane_toast_notification(
                             ToastNotificationDuration::Long => ToastDuration::Long,
                         };
                     }
+                    // Each image is optional and independent of the others
+                    toast.images = ToastImages {
+                        icon: format.icon.filter(|s| !s.is_empty()),
+                        inline: format.image.filter(|s| !s.is_empty()),
+                        hero: format.hero_image.filter(|s| !s.is_empty()),
+                    };
                 }
                 Err(err) => {
                     log::warn!("format-toast-notification returned an invalid value: {err:#}");

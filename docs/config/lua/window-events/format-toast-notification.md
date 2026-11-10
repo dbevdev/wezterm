@@ -45,6 +45,18 @@ The return value of the event can be:
     * `duration` - `"Short"` or `"Long"`: overrides
       [toast_notification_duration](../config/toast_notification_duration.md)
       for this notification. *Windows only.*
+    * `icon` - an image that is shown instead of the icon of wezterm.
+      *Windows only.*
+    * `image` - an image that is shown below the text. *Windows only.*
+    * `hero_image` - a wide banner that is shown above the text.
+      *Windows only.*
+
+The three images are independent of each other: set any combination of them,
+or none. Each is the absolute path of an image file on the machine that runs
+the wezterm GUI, such as a PNG or a JPEG; Windows doesn't fetch images from
+the network for an application like wezterm. Keep the files small: Windows
+ignores images that are larger than a few megabytes. If a file doesn't exist,
+a warning is logged and the notification is shown without that image.
 
 Only the first handler that was registered for the event is called. The
 handler may call asynchronous functions. If it raises an error, or returns
@@ -65,6 +77,32 @@ wezterm.on('format-toast-notification', function(window, pane, notification)
     source = pane:get_title()
   end
   return { attribution = source }
+end)
+
+return {}
+```
+
+This example gives the notifications whose text starts with `Build` an icon
+and a banner, and leaves the others as they are. Setting an entry of `IMAGES`
+to `nil` turns that image off:
+
+```lua
+local wezterm = require 'wezterm'
+
+local IMAGES = {
+  icon = wezterm.home_dir .. '\\Pictures\\toast\\build-icon.png',
+  image = nil,
+  hero_image = wezterm.home_dir .. '\\Pictures\\toast\\build-banner.png',
+}
+
+wezterm.on('format-toast-notification', function(window, pane, notification)
+  if notification.body:find '^Build' then
+    return {
+      icon = IMAGES.icon,
+      image = IMAGES.image,
+      hero_image = IMAGES.hero_image,
+    }
+  end
 end)
 
 return {}
