@@ -16,6 +16,19 @@ fn main() {
             if let Ok(ref_head) = repo.find_reference("HEAD") {
                 let repo_path = repo.path().to_path_buf();
 
+                // HEAD itself changes when a different branch is checked
+                // out. Without this we'd only notice new commits on the
+                // branch that was checked out when we last ran, and would
+                // keep reporting the version of that branch after
+                // switching to another one.
+                let head_path = repo_path.join("HEAD");
+                if head_path.exists() {
+                    println!(
+                        "cargo:rerun-if-changed={}",
+                        head_path.canonicalize().unwrap().display()
+                    );
+                }
+
                 if let Ok(resolved) = ref_head.resolve() {
                     if let Some(name) = resolved.name() {
                         let path = repo_path.join(name);
