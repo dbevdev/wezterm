@@ -445,6 +445,7 @@ impl FallbackResolveInfo {
                     attribution: None,
                     silent: false,
                     tag: None,
+                    images: Default::default(),
                 }
                 .show();
             } else {

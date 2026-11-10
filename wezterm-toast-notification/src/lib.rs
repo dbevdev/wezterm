@@ -61,6 +61,22 @@ pub struct ToastNotification {
     /// hasn't been dismissed yet, and `dismiss` removes it.
     /// Currently only respected on Windows.
     pub tag: Option<String>,
+    /// The images to show in the notification. Each is the absolute path
+    /// of an image file, or a URI that the system is able to resolve.
+    /// Currently only respected on Windows.
+    pub images: ToastImages,
+}
+
+/// The places in a notification that can show an image.
+/// They are independent of each other; any combination may be set.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ToastImages {
+    /// Shown instead of the icon of the application
+    pub icon: Option<String>,
+    /// Shown below the text
+    pub inline: Option<String>,
+    /// A wide banner that is shown above the text
+    pub hero: Option<String>,
 }
 
 impl ToastNotification {
@@ -113,6 +129,7 @@ pub fn persistent_toast_notification_with_click_to_open_url(title: &str, message
         attribution: None,
         silent: false,
         tag: None,
+        images: ToastImages::default(),
     });
 }
 
@@ -127,6 +144,7 @@ pub fn persistent_toast_notification(title: &str, message: &str) {
         attribution: None,
         silent: false,
         tag: None,
+        images: ToastImages::default(),
     });
 }
 

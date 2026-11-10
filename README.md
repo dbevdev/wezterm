@@ -71,7 +71,8 @@ end)
   replaces the earlier one, and it is removed when you move to that pane or
   close it.
 * The `format-toast-notification` event can change the heading and the text
-  of such a notification, add a line that says where it came from, make it
+  of such a notification, add a line that says where it came from, give it
+  an icon, an image and a banner (`icon`, `image`, `hero_image`), make it
   silent, change its duration, or prevent it from being shown.
 * The `SuppressFromFocused*` values of `notification_handling` only suppress
   the notification while the wezterm window that shows the pane has the
