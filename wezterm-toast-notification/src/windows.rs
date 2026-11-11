@@ -117,7 +117,9 @@ fn show_notif_impl(toast: TN) -> Result<(), Box<dyn std::error::Error>> {
 
     let notif = ToastNotification::CreateToastNotification(xml)?;
 
-    if let Some(tag) = toast.tag.as_ref() {
+    // toast is moved into the Activated handler below
+    let tag = toast.tag.clone();
+    if let Some(tag) = tag.as_ref() {
         notif.SetTag(HSTRING::from(tag.as_str()))?;
         notif.SetGroup(tag_group())?;
     }
@@ -159,6 +161,16 @@ fn show_notif_impl(toast: TN) -> Result<(), Box<dyn std::error::Error>> {
     */
 
     let notifier = ToastNotificationManager::CreateToastNotifierWithId(HSTRING::from(APP_ID))?;
+
+    if let Some(tag) = tag.as_ref() {
+        // Showing a notification with the same tag as one that is still on
+        // screen only updates the entry in the notification center; Windows
+        // doesn't show the new one on screen. Removing the earlier one first
+        // makes the new one appear on screen as a fresh notification.
+        if let Err(err) = dismiss_notif_impl(tag) {
+            log::debug!("Failed to remove toast notification {}: {:#}", tag, err);
+        }
+    }
 
     notifier.Show(&notif)?;
 

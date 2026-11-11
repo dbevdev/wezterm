@@ -56,7 +56,8 @@ is enabled.
 
 On Windows, a pane has at most one notification at a time: a new
 notification replaces the one that the same pane generated earlier, rather
-than accumulating in the notification center. The notification is removed
+than accumulating in the notification center. The new notification is shown
+on screen even when the earlier one is still there. The notification is removed
 when you move to the pane that generated it, and when that pane is closed.
 
 ## Changing how the notification looks
